@@ -19,7 +19,10 @@ const VEHICLES = [
     { name: "Kaicene", plate: "A24AY7C" },
     { name: "Hunter", plate: "A87BD3J" },
     { name: "Silverado", plate: "A95A01A" },
-    { name: "Cruze", plate: "AD286ZG" }
+    { name: "Cruze", plate: "AD286ZG" },
+    { name: "FOTON / Tunland", plate: "A17DB8J" },
+    { name: "FOTON / Tunland", plate: "A17DB1J" },
+    { name: "FOTON / Tunland", plate: "A43DE8J" }
 ];
 const HIDDEN_SEEDED_CATEGORIES = [
     "Gasolina",

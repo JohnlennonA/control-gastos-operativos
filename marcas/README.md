@@ -6,5 +6,6 @@ Coloca aqui los SVG de marcas con estos nombres exactos:
 - `changan.png` para Kaicene
 - `changan.png` para Hunter
 - `chevrolet.svg` para Silverado y Cruze
+- `foton.png` para FOTON / Tunland
 
 Si algun SVG no existe, la app mostrara una inicial como respaldo para evitar imagen rota.
