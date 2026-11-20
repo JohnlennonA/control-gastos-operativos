@@ -3,57 +3,48 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Acceso | Control de Gastos</title>
-	<meta name="theme-color" content="#2563EB">
+	<title>Iniciar sesión | Control de Gastos</title>
+	<meta name="theme-color" content="#0F172A">
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-title" content="Gastos">
 	<meta name="apple-mobile-web-app-status-bar-style" content="default">
 	<link rel="manifest" href="manifest.webmanifest">
-	<link rel="apple-touch-icon" href="image.png">
+	<link rel="apple-touch-icon" href="img/opex-app-icon.png">
+	<link rel="icon" type="image/svg+xml" href="img/opex-favicon.svg">
+	<link rel="alternate icon" type="image/png" href="img/opex-app-icon.png">
 	<link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="icon" type="image/png" href="image.png">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 	<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 	<style>
 		:root {
+			--navy: #0F172A;
+			--slate: #1E293B;
 			--bg: #F8FAFC;
 			--surface: #FFFFFF;
-			--surface-soft: #F1F5F9;
-			--text: #1E293B;
+			--text: #0F172A;
 			--muted: #64748B;
 			--line: #E2E8F0;
 			--line-strong: #CBD5E1;
 			--primary: #2563EB;
-			--primary-soft: #DBEAFE;
-			--success: #16A34A;
-			--shadow: 0 4px 20px rgba(0,0,0,0.05);
-			--shadow-strong: 0 18px 50px rgba(15,23,42,0.10);
-			--radius: 8px;
-			--sans: "IBM Plex Sans", "Segoe UI", sans-serif;
-			--mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+			--primary-dark: #1D4ED8;
+			--radius: 10px;
+			--sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 		}
 
-		* {
-			box-sizing: border-box;
-		}
+		* { box-sizing: border-box; }
 
 		body {
 			margin: 0;
 			min-height: 100vh;
-			background:
-				linear-gradient(115deg, rgba(37,99,235,0.08) 0 32%, transparent 32% 100%),
-				linear-gradient(180deg, #FFFFFF 0%, var(--bg) 48%, #EEF6FF 100%);
+			background: var(--surface);
 			color: var(--text);
 			font-family: var(--sans);
-			font-variant-numeric: tabular-nums;
+			-webkit-font-smoothing: antialiased;
 		}
 
-		button,
-		input {
-			font: inherit;
-		}
+		button, input { font: inherit; }
 
 		.page-loader {
 			position: fixed;
@@ -61,284 +52,368 @@
 			display: none;
 			place-items: center;
 			z-index: 1000;
-			background: rgba(248,250,252,0.86);
-			backdrop-filter: blur(10px);
+			background: rgba(255, 255, 255, 0.85);
+			backdrop-filter: blur(6px);
 		}
 
-		.page-loader.is-visible {
-			display: grid;
-		}
+		.page-loader.is-visible { display: grid; }
 
 		.loader-spinner {
-			width: 38px;
-			height: 38px;
-			border: 3px solid rgba(37,99,235,0.18);
+			width: 34px;
+			height: 34px;
+			border: 2.5px solid #E2E8F0;
 			border-top-color: var(--primary);
 			border-radius: 50%;
-			animation: loaderSpin 800ms linear infinite;
+			animation: loaderSpin 750ms linear infinite;
 		}
 
 		@keyframes loaderSpin {
 			to { transform: rotate(360deg); }
 		}
 
-		.login-page {
+		@keyframes fadeUpIn {
+			from {
+				opacity: 0;
+				transform: translateY(16px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		@keyframes fleetReveal {
+			from {
+				opacity: 0;
+				transform: translateY(10px) scale(1.02);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0) scale(1);
+			}
+		}
+
+		.anim-in {
+			opacity: 0;
+			animation: fadeUpIn 580ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+		}
+
+		.anim-d1 { animation-delay: 80ms; }
+		.anim-d2 { animation-delay: 160ms; }
+		.anim-d3 { animation-delay: 240ms; }
+		.anim-d4 { animation-delay: 320ms; }
+		.anim-d5 { animation-delay: 400ms; }
+		.anim-d6 { animation-delay: 480ms; }
+
+		@media (prefers-reduced-motion: reduce) {
+			.anim-in, .form-pane-fleet {
+				animation: none !important;
+				opacity: 1 !important;
+				transform: none !important;
+			}
+		}
+
+		.split-layout {
 			display: grid;
-			grid-template-rows: auto 1fr auto;
+			grid-template-columns: minmax(0, 1.05fr) minmax(400px, 0.95fr);
 			min-height: 100vh;
 		}
 
-		.login-topbar {
+		/* Panel izquierdo sobrio (solo escritorio) */
+		.hero-pane {
 			display: flex;
-			align-items: center;
+			flex-direction: column;
 			justify-content: space-between;
-			gap: 16px;
-			width: min(1180px, calc(100% - 32px));
-			margin: 0 auto;
-			padding: 22px 0;
+			padding: 44px 56px;
+			background: #0F172A;
+			color: #F8FAFC;
+			border-right: 1px solid #1E293B;
 		}
 
-		.brand-mark {
+		.hero-brand {
 			display: inline-flex;
 			align-items: center;
-			gap: 10px;
-			min-width: 0;
-			font-weight: 800;
+			gap: 12px;
 		}
 
-		.brand-logo {
+		.hero-brand-mark {
 			display: grid;
 			place-items: center;
 			width: 38px;
 			height: 38px;
-			border: 1px solid #BFDBFE;
-			border-radius: var(--radius);
-			background: #EFF6FF;
+			border-radius: 9px;
+			background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+			color: #FFFFFF;
+			box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+		}
+
+		.hero-brand-mark svg {
+			width: 20px;
+			height: 20px;
+		}
+
+		.hero-brand span {
+			font-size: 1.05rem;
+			font-weight: 700;
+			color: #F8FAFC;
+			letter-spacing: -0.015em;
+		}
+
+		.hero-body {
+			max-width: 460px;
+			display: grid;
+			gap: 16px;
+		}
+
+		.hero-body h1 {
+			margin: 0;
+			font-size: clamp(2rem, 3.2vw, 2.75rem);
+			font-weight: 700;
+			line-height: 1.12;
+			letter-spacing: -0.03em;
+			color: #FFFFFF;
+		}
+
+		.hero-body p {
+			margin: 0;
+			color: #94A3B8;
+			font-size: 0.98rem;
+			line-height: 1.65;
+		}
+
+		.hero-list {
+			margin: 8px 0 0;
+			padding: 0;
+			list-style: none;
+			display: grid;
+			gap: 10px;
+		}
+
+		.hero-list li {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			color: #CBD5E1;
+			font-size: 0.9rem;
+		}
+
+		.hero-list li::before {
+			content: "";
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: #3B82F6;
+			flex-shrink: 0;
+		}
+
+		.hero-footer {
+			display: grid;
+			gap: 10px;
+			color: #64748B;
+			font-size: 0.78rem;
+		}
+
+		.hero-companies-bar {
+			display: inline-flex;
+			align-items: center;
+			gap: 18px;
+			width: fit-content;
+			border-radius: 10px;
+			background: #FFFFFF;
+			padding: 9px 16px;
+			box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+		}
+
+		.hero-companies-bar img {
+			height: 30px;
+			width: auto;
+			object-fit: contain;
+			display: block;
+		}
+
+		.hero-companies-divider {
+			width: 1px;
+			height: 24px;
+			background: #E2E8F0;
+		}
+
+		/* Panel derecho formulario + flota inferior */
+		.form-pane {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			padding: 36px 28px 230px;
+			background: #FFFFFF;
 			overflow: hidden;
 		}
 
-		.brand-logo img {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
+		.form-pane-fleet {
+			position: absolute;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			height: 225px;
+			background-image:
+				linear-gradient(180deg, #FFFFFF 0%, rgba(255, 255, 255, 0.88) 20%, rgba(255, 255, 255, 0.16) 56%, rgba(255, 255, 255, 0) 100%),
+				url("banner-ops.jpg?v=58");
+			background-repeat: no-repeat;
+			background-position: center bottom, 72% 76%;
+			background-size: 100% 100%, cover;
+			pointer-events: none;
+			opacity: 0;
+			animation: fleetReveal 850ms cubic-bezier(0.22, 1, 0.36, 1) 220ms forwards;
 		}
 
-		.topbar-status {
-			display: inline-flex;
-			align-items: center;
-			gap: 8px;
-			border: 1px solid var(--line);
-			border-radius: 999px;
-			background: rgba(255,255,255,0.76);
-			color: var(--muted);
-			padding: 8px 12px;
-			font-size: 0.86rem;
-			font-weight: 700;
-		}
-
-		.status-dot {
-			width: 8px;
-			height: 8px;
-			border-radius: 999px;
-			background: var(--success);
-			box-shadow: 0 0 0 4px rgba(22,163,74,0.12);
-		}
-
-		.login-shell {
-			display: grid;
-			grid-template-columns: minmax(0, 1.05fr) minmax(360px, 420px);
-			align-items: center;
-			width: min(1180px, calc(100% - 32px));
-			min-height: calc(100vh - 128px);
-			margin: 0 auto;
-			gap: 54px;
-			padding: 18px 0 36px;
-		}
-
-		.brand-panel {
+		.login-box {
+			position: relative;
+			z-index: 1;
+			width: min(100%, 372px);
 			display: grid;
 			gap: 24px;
 		}
 
-		.brand-intro {
-			display: grid;
-			gap: 18px;
-		}
-
-		.eyebrow {
-			margin: 0;
-			color: var(--muted);
-			font-size: 0.82rem;
-			font-weight: 700;
-			letter-spacing: 0.08em;
-			text-transform: uppercase;
-		}
-
-		h1 {
-			margin: 0;
-			max-width: 650px;
-			font-size: clamp(2.6rem, 5vw, 4.85rem);
-			line-height: 0.96;
-			letter-spacing: 0;
-		}
-
-		.brand-copy {
-			max-width: 560px;
-			margin: 0;
-			color: var(--muted);
-			font-size: 1.05rem;
-			line-height: 1.65;
-		}
-
-		.metrics-strip {
-			display: grid;
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-			gap: 10px;
-			max-width: 620px;
-		}
-
-		.metric {
-			border: 1px solid var(--line);
-			border-radius: var(--radius);
-			background: rgba(255,255,255,0.86);
-			box-shadow: var(--shadow);
-			padding: 16px;
-		}
-
-		.metric strong {
-			display: block;
-			font-family: var(--mono);
-			font-size: 1.05rem;
-		}
-
-		.metric span {
-			color: var(--muted);
-			font-size: 0.82rem;
-			font-weight: 700;
-		}
-
-		.assurance-panel {
-			display: grid;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			gap: 10px;
-			max-width: 620px;
-		}
-
-		.assurance-item {
-			border-left: 3px solid var(--primary);
-			background: rgba(255,255,255,0.64);
-			padding: 10px 12px;
-		}
-
-		.assurance-item strong,
-		.assurance-item span {
-			display: block;
-		}
-
-		.assurance-item strong {
-			font-size: 0.9rem;
-		}
-
-		.assurance-item span {
-			color: var(--muted);
-			font-size: 0.82rem;
-			margin-top: 3px;
-		}
-
-		.login-card {
-			position: relative;
-			border: 1px solid var(--line);
-			border-radius: var(--radius);
-			background: var(--surface);
-			box-shadow: var(--shadow-strong);
-			padding: 28px;
-			overflow: hidden;
-		}
-
-		.login-card::before {
-			content: "";
-			position: absolute;
-			inset: 0 0 auto;
-			height: 4px;
-			background: linear-gradient(90deg, var(--primary), #38BDF8);
-		}
-
-		.login-card-header {
-			display: flex;
-			align-items: flex-start;
-			justify-content: space-between;
-			gap: 16px;
-			margin-bottom: 22px;
-		}
-
-		.login-card-badge {
+		.login-brand-inline {
 			display: inline-flex;
 			align-items: center;
-			border: 1px solid #BBF7D0;
-			border-radius: 999px;
-			background: #F0FDF4;
-			color: #15803D;
-			padding: 5px 9px;
+			gap: 10px;
+		}
+
+		.login-brand-mark {
+			display: grid;
+			place-items: center;
+			width: 34px;
+			height: 34px;
+			border-radius: 8px;
+			background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+			color: #FFFFFF;
+			box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+		}
+
+		.login-brand-mark svg {
+			width: 18px;
+			height: 18px;
+		}
+
+		.login-brand-inline strong {
+			display: block;
+			font-size: 0.94rem;
+			font-weight: 700;
+			color: var(--text);
+			letter-spacing: -0.01em;
+		}
+
+		.login-brand-inline small {
+			display: block;
 			font-size: 0.74rem;
-			font-weight: 800;
+			color: var(--muted);
+			font-weight: 500;
 		}
 
-		.login-card h2 {
+		.login-heading {
+			text-align: left;
+		}
+
+		.login-heading h2 {
 			margin: 0 0 6px;
-			font-size: 1.35rem;
+			font-size: 1.55rem;
+			font-weight: 700;
+			letter-spacing: -0.025em;
+			color: var(--text);
 		}
 
-		.login-card p {
+		.login-heading p {
 			margin: 0;
 			color: var(--muted);
+			font-size: 0.92rem;
 			line-height: 1.5;
 		}
 
 		.field {
 			display: grid;
-			gap: 8px;
-			margin-bottom: 14px;
+			gap: 6px;
+			margin-bottom: 16px;
 		}
 
 		.field label {
 			color: #334155;
 			font-size: 0.86rem;
-			font-weight: 700;
+			font-weight: 600;
+		}
+
+		.input-wrap {
+			position: relative;
+			display: flex;
+			align-items: center;
+		}
+
+		.input-icon {
+			position: absolute;
+			left: 13px;
+			width: 17px;
+			height: 17px;
+			color: #94A3B8;
+			pointer-events: none;
 		}
 
 		.field input {
 			width: 100%;
-			min-height: 48px;
+			height: 46px;
 			border: 1px solid var(--line-strong);
 			border-radius: var(--radius);
-			background: #F8FAFC;
+			background: #FFFFFF;
 			color: var(--text);
-			padding: 11px 13px;
+			padding: 0 40px 0 38px;
+			font-size: 0.94rem;
 			outline: none;
-			transition: border-color 160ms ease, box-shadow 160ms ease;
+			transition: border-color 150ms ease, box-shadow 150ms ease;
+		}
+
+		.field input::placeholder {
+			color: #94A3B8;
 		}
 
 		.field input:focus {
 			border-color: var(--primary);
-			box-shadow: 0 0 0 3px rgba(37,99,235,0.13);
+			box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+		}
+
+		.toggle-pass {
+			position: absolute;
+			right: 6px;
+			display: grid;
+			place-items: center;
+			width: 34px;
+			height: 34px;
+			border: 0;
+			border-radius: 7px;
+			background: transparent;
+			color: #94A3B8;
+			cursor: pointer;
+		}
+
+		.toggle-pass:hover {
+			color: #334155;
+			background: #F1F5F9;
 		}
 
 		.primary-button {
 			width: 100%;
-			min-height: 48px;
+			height: 46px;
+			margin-top: 4px;
 			border: 0;
 			border-radius: var(--radius);
 			background: var(--primary);
 			color: #FFFFFF;
-			box-shadow: 0 8px 18px rgba(37,99,235,0.22);
 			cursor: pointer;
-			font-weight: 800;
-			transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+			font-size: 0.94rem;
+			font-weight: 600;
+			transition: background 150ms ease, opacity 150ms ease;
 		}
 
 		.primary-button:hover:not(:disabled) {
-			box-shadow: 0 12px 24px rgba(37,99,235,0.26);
-			transform: translateY(-1px);
+			background: var(--primary-dark);
 		}
 
 		.primary-button:disabled {
@@ -347,129 +422,43 @@
 		}
 
 		.login-footnote {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			gap: 8px;
-			margin-top: 18px;
-			color: var(--muted);
-			font-size: 0.85rem;
+			color: #94A3B8;
+			font-size: 0.8rem;
 			text-align: center;
 		}
 
-		.login-footnote::before {
-			content: "";
-			width: 7px;
-			height: 7px;
-			border-radius: 50%;
-			background: var(--success);
-		}
+		.swal2-popup { font-family: var(--sans); }
 
-		.login-footer {
-			width: min(1180px, calc(100% - 32px));
-			margin: 0 auto;
-			padding: 0 0 22px;
-			color: var(--muted);
-			font-size: 0.82rem;
-		}
-
-		.swal2-popup {
-			font-family: var(--sans);
-		}
-
-		@media (max-width: 1100px) {
-			.login-topbar {
-				align-items: flex-start;
-				flex-direction: column;
-				padding: 16px 0;
-			}
-
-			.login-shell {
-				grid-template-columns: 1fr;
-				align-content: start;
-				gap: 22px;
-				min-height: auto;
-				padding: 18px 0 30px;
-			}
-
-			.brand-panel {
-				display: contents;
-			}
-
-			.brand-intro {
-				display: contents;
-			}
-
-			.brand-intro .eyebrow {
-				order: 1;
-			}
-
-			.brand-intro h1 {
-				order: 2;
-			}
-
-			.login-card {
-				order: 3;
-			}
-
-			.brand-copy {
-				order: 4;
-			}
-
-			.metrics-strip {
-				order: 5;
-			}
-
-			.assurance-panel {
-				order: 6;
-			}
-
-			.brand-intro .eyebrow,
-			.brand-intro h1,
-			.login-card,
-			.brand-copy,
-			.metrics-strip,
-			.assurance-panel {
-				width: min(100%, 620px);
-				justify-self: center;
-			}
-
-			h1 {
-				font-size: clamp(2.2rem, 12vw, 3.4rem);
-			}
-
-			.metrics-strip {
+		/* En móvil: ocultar completamente el panel informativo y dejar solo el login */
+		@media (max-width: 900px) {
+			.split-layout {
 				grid-template-columns: 1fr;
 			}
 
-			.metric {
-				text-align: center;
+			.hero-pane {
+				display: none;
 			}
 
-			.assurance-panel {
-				grid-template-columns: 1fr;
+			.form-pane {
+				min-height: 100vh;
+				padding: 24px 20px 170px;
+				background: var(--bg);
 			}
 
-			.assurance-item {
-				border-left: 0;
-				border-top: 3px solid var(--primary);
-				text-align: center;
+			.form-pane-fleet {
+				height: 165px;
+				background-image:
+					linear-gradient(180deg, #F8FAFC 0%, rgba(248, 250, 252, 0.88) 22%, rgba(248, 250, 252, 0.18) 58%, rgba(248, 250, 252, 0) 100%),
+					url("banner-ops.jpg?v=58");
+				background-position: center bottom, 66% 74%;
 			}
 
-			.login-card {
-				padding: 24px;
-			}
-		}
-
-		@media (max-width: 520px) {
-			.login-topbar,
-			.login-shell,
-			.login-footer {
-				width: min(100% - 20px, 480px);
-			}
-
-			.login-card-header {
-				flex-direction: column;
+			.login-box {
+				background: #FFFFFF;
+				border: 1px solid var(--line);
+				border-radius: 14px;
+				padding: 28px 22px;
+				box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
 			}
 		}
 	</style>
@@ -479,68 +468,87 @@
 		<div class="loader-spinner" aria-label="Cargando"></div>
 	</div>
 
-	<div class="login-page">
-		<header class="login-topbar">
-			<div class="brand-mark" aria-label="Sistema de Control de Gastos">
-				<span class="brand-logo"><img src="image.png" alt=""></span>
-				<span>Sistema de Control</span>
+	<div class="split-layout">
+		<section class="hero-pane" aria-labelledby="loginTitle">
+			<div class="hero-brand anim-in">
+				<span class="hero-brand-mark" aria-hidden="true">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><rect x="5" y="11" width="3.5" height="7" rx="1" fill="currentColor" fill-opacity="0.28"/><rect x="10.25" y="7" width="3.5" height="11" rx="1" fill="currentColor" fill-opacity="0.28"/><rect x="15.5" y="4" width="3.5" height="14" rx="1" fill="currentColor" fill-opacity="0.28"/></svg>
+				</span>
+				<span>OPEX Manager</span>
 			</div>
-			<div class="topbar-status"><span class="status-dot"></span>Acceso corporativo seguro</div>
-		</header>
 
-		<main class="login-shell">
-			<section class="brand-panel" aria-labelledby="loginTitle">
-				<div class="brand-intro">
-					<p class="eyebrow">Gestión de gastos operativos</p>
-					<h1 id="loginTitle">Control operativo de gastos</h1>
-					<p class="brand-copy">Registra comprobantes, convierte montos con tasa BCV y consolida reportes para revisión gerencial desde un flujo privado y ordenado.</p>
+			<div class="hero-body">
+				<h1 id="loginTitle" class="anim-in anim-d1">Gestión clara de gastos operativos.</h1>
+				<p class="anim-in anim-d2">Registra comprobantes desde campo, aplica la tasa BCV del día y consolida reportes por empresa en un solo lugar.</p>
+				<ul class="hero-list">
+					<li class="anim-in anim-d3">Separación operativa para UV Servicios y Union Data</li>
+					<li class="anim-in anim-d4">Conversión automática con tasas oficiales BCV</li>
+					<li class="anim-in anim-d5">Reportes ejecutivos exportables a Excel</li>
+				</ul>
+			</div>
+
+			<div class="hero-footer anim-in anim-d6">
+				<div class="hero-companies-bar" aria-label="Empresas operativas">
+					<img src="img/UV%20SERVICES%20-%20Logo%20vectorial%20sin%20fondo.png" alt="UV Servicios">
+					<span class="hero-companies-divider" aria-hidden="true"></span>
+					<img src="img/UnionDataServicios.png" alt="Unión Data Servicios">
 				</div>
+				<span>Uso interno · Personal autorizado</span>
+			</div>
+		</section>
 
-				<div class="metrics-strip" aria-label="Resumen de capacidades">
-					<div class="metric"><strong>Auth</strong><span>Usuarios autorizados</span></div>
-					<div class="metric"><strong>BCV</strong><span>Conversión automática</span></div>
-					<div class="metric"><strong>XLSX</strong><span>Reporte gerencial</span></div>
-				</div>
-
-				<div class="assurance-panel" aria-label="Beneficios del sistema">
-					<div class="assurance-item"><strong>Histórico centralizado</strong><span>Gastos organizados por periodo y responsable.</span></div>
-					<div class="assurance-item"><strong>Soporte documental</strong><span>Comprobantes almacenados para auditoría interna.</span></div>
-				</div>
-			</section>
-
-			<section class="login-card" aria-label="Inicio de sesión">
-				<div class="login-card-header">
+		<main class="form-pane">
+			<div class="login-box anim-in anim-d1">
+				<div class="login-brand-inline">
+					<span class="login-brand-mark" aria-hidden="true">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16"/><rect x="5" y="11" width="3.5" height="7" rx="1" fill="currentColor" fill-opacity="0.28"/><rect x="10.25" y="7" width="3.5" height="11" rx="1" fill="currentColor" fill-opacity="0.28"/><rect x="15.5" y="4" width="3.5" height="14" rx="1" fill="currentColor" fill-opacity="0.28"/></svg>
+					</span>
 					<div>
-						<h2>Ingresar</h2>
-						<p>Usa tus credenciales asignadas para acceder al módulo.</p>
+						<strong>OPEX Manager</strong>
+						<small>UV Servicios · Unión Data</small>
 					</div>
-					<span class="login-card-badge">Supabase Auth</span>
+				</div>
+
+				<div class="login-heading">
+					<h2>Iniciar sesión</h2>
+					<p>Ingresa tu correo y contraseña para acceder.</p>
 				</div>
 
 				<form id="loginForm">
 					<div class="field">
-						<label for="email">Correo corporativo</label>
-						<input id="email" name="email" type="email" autocomplete="email" required placeholder="usuario@empresa.com">
+						<label for="email">Correo electrónico</label>
+						<div class="input-wrap">
+							<svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+							<input id="email" name="email" type="email" autocomplete="email" required placeholder="nombre@empresa.com">
+						</div>
 					</div>
 					<div class="field">
 						<label for="password">Contraseña</label>
-						<input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Ingresa tu contraseña">
+						<div class="input-wrap">
+							<svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+							<input id="password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+							<button class="toggle-pass" id="togglePassword" type="button" aria-label="Mostrar u ocultar contraseña" title="Mostrar contraseña">
+								<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+							</button>
+						</div>
 					</div>
-					<button class="primary-button" id="loginButton" type="submit">Ingresar al sistema</button>
+					<button class="primary-button" id="loginButton" type="submit">Entrar</button>
 				</form>
-				<div class="login-footnote">Sesión protegida por autenticación de usuarios</div>
-			</section>
-		</main>
 
-		<footer class="login-footer">Control de gastos operativos.</footer>
+				<div class="login-footnote">Acceso corporativo privado</div>
+			</div>
+			<div class="form-pane-fleet" aria-hidden="true"></div>
+		</main>
 	</div>
 
-	<script src="supabase-config.js?v=46"></script>
-	<script src="app-install.js?v=46"></script>
+	<script src="supabase-config.js?v=66"></script>
+	<script src="app-install.js?v=66"></script>
 	<script>
 		const loginForm = document.querySelector("#loginForm");
 		const loginButton = document.querySelector("#loginButton");
 		const pageLoader = document.querySelector("#pageLoader");
+		const passwordInput = document.querySelector("#password");
+		const togglePassword = document.querySelector("#togglePassword");
 
 		function showPageLoader() {
 			pageLoader.classList.add("is-visible");
@@ -551,6 +559,12 @@
 			pageLoader.classList.remove("is-visible");
 			pageLoader.setAttribute("aria-hidden", "true");
 		}
+
+		togglePassword?.addEventListener("click", () => {
+			const isPassword = passwordInput.type === "password";
+			passwordInput.type = isPassword ? "text" : "password";
+			togglePassword.title = isPassword ? "Ocultar contraseña" : "Mostrar contraseña";
+		});
 
 		document.addEventListener("DOMContentLoaded", async () => {
 			const { data } = await supabaseClient.auth.getSession();
@@ -573,7 +587,7 @@
 
 			if (error) {
 				loginButton.disabled = false;
-				loginButton.textContent = "Entrar al sistema";
+				loginButton.textContent = "Entrar";
 				hidePageLoader();
 				await Swal.fire({ icon: "error", title: "Acceso rechazado", text: error.message });
 				return;

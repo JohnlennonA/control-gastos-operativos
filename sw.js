@@ -1,10 +1,15 @@
-const CACHE_NAME = "control-gastos-v48";
+const CACHE_NAME = "control-gastos-v66";
 const APP_ASSETS = [
   "./manifest.webmanifest",
-  "./image.png"
+  "./banner-ops.jpg?v=58",
+  "./img/opex-app-icon.png",
+  "./img/opex-favicon.svg",
+  "./img/UnionDataServicios.png",
+  "./img/UV%20SERVICES%20-%20Logo%20vectorial%20sin%20fondo.png"
 ];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_ASSETS))
   );
@@ -12,16 +17,12 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-    ))
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
   );
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
 });
 
 self.addEventListener("fetch", (event) => {

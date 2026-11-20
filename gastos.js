@@ -5,14 +5,20 @@ const BCV_RATE_STORAGE_KEY = "gastos_operativos_tasa_bcv";
 const BCV_EUR_RATE_STORAGE_KEY = "gastos_operativos_tasa_bcv_eur";
 const BINANCE_RATE_STORAGE_KEY = "gastos_operativos_tasa_binance";
 const EXPENSE_DRAFT_STORAGE_KEY = "gastos_operativos_borrador";
+const SIDEBAR_COLLAPSED_KEY = "gastos_operativos_sidebar_collapsed";
 const BCV_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const PAYMENT_METHODS = {
     USD: ["Efectivo", "USDT", "Zelle", "Binance"],
     VES: ["Pago móvil", "Transferencia", "Punto de venta", "Efectivo Bs"]
 };
+const COMPANIES = ["UV Servicios", "Union Data"];
+const COMPANY_LOGOS = {
+    "UV Servicios": "img/UV%20SERVICES%20-%20Logo%20vectorial%20sin%20fondo.png",
+    "Union Data": "img/UnionDataServicios.png"
+};
 const BASE_CATEGORIES = ["COMIDA", "HERRAMIENTAS", "MATERIALES", "EQUIPOS", "INSUMOS", "VEHICULOS"];
 const VEHICLE_KILOMETER_DETAILS = ["GASOLINA", "CAMBIO DE ACEITE", "SERVICIOS"];
-const HISTORY_SELECT_FULL = "id,user_email,fecha,categoria_nombre,numero_factura,moneda,forma_pago,tipo_tasa,monto_usd,tasa_bcv,monto_ves,vehiculo_nombre,vehiculo_placa,kilometraje,litros_gasolina,detalle_actividad,descripcion,responsable,comprobante_url,created_at";
+const HISTORY_SELECT_FULL = "id,user_email,fecha,empresa,categoria_nombre,numero_factura,moneda,forma_pago,tipo_tasa,monto_usd,tasa_bcv,monto_ves,vehiculo_nombre,vehiculo_placa,kilometraje,litros_gasolina,detalle_actividad,descripcion,responsable,comprobante_url,created_at";
 const HISTORY_SELECT_LEGACY = "id,user_email,fecha,categoria_nombre,numero_factura,moneda,forma_pago,tipo_tasa,monto_usd,tasa_bcv,monto_ves,kilometraje,detalle_actividad,descripcion,responsable,comprobante_url,created_at";
 const VEHICLES = [
     { name: "Gran Vitara", plate: "AFN06W" },
@@ -48,12 +54,18 @@ const state = {
     currentUserName: "",
     userRole: "operador",
     isAdmin: false,
-    historyRows: []
+    historyRows: [],
+    liveCharts: {
+        company: null,
+        category: null
+    }
 };
 
 const elements = {
     form: document.querySelector("#expenseForm"),
     fecha: document.querySelector("#fecha"),
+    empresa: document.querySelector("#empresa"),
+    companyCards: document.querySelectorAll(".company-card"),
     categoria: document.querySelector("#categoria"),
     deleteCategoryButton: document.querySelector("#deleteCategoryButton"),
     vehiculoUnidadField: document.querySelector("#vehiculoUnidadField"),
@@ -88,6 +100,10 @@ const elements = {
     filePreview: document.querySelector("#filePreview"),
     historyList: document.querySelector("#historyList"),
     historyCount: document.querySelector("#historyCount"),
+    historySearch: document.querySelector("#historySearch"),
+    clearHistorySearch: document.querySelector("#clearHistorySearch"),
+    historySearchCount: document.querySelector("#historySearchCount"),
+    scrollTopButton: document.querySelector("#scrollTopButton"),
     submitButton: document.querySelector("#submitButton"),
     logoutButton: document.querySelector("#logoutButton"),
     reloadAppButton: document.querySelector("#reloadAppButton"),
@@ -96,11 +112,27 @@ const elements = {
     periodFilter: document.querySelector("#periodFilter"),
     fromDate: document.querySelector("#fromDate"),
     toDate: document.querySelector("#toDate"),
+    companyFilter: document.querySelector("#companyFilter"),
     refreshButton: document.querySelector("#refreshButton"),
     exportButton: document.querySelector("#exportButton"),
     totalUsd: document.querySelector("#totalUsd"),
     totalVes: document.querySelector("#totalVes"),
     totalReceipts: document.querySelector("#totalReceipts"),
+    totalAvg: document.querySelector("#totalAvg"),
+    receiptCoverage: document.querySelector("#receiptCoverage"),
+    sidebarBcvUsd: document.querySelector("#sidebarBcvUsd"),
+    sidebarBcvEur: document.querySelector("#sidebarBcvEur"),
+    workspaceShell: document.querySelector("#workspaceShell"),
+    sidebarToggle: document.querySelector("#sidebarToggle"),
+    userRoleBadge: document.querySelector("#userRoleBadge"),
+    bannerUserName: document.querySelector("#bannerUserName"),
+    bannerUserRole: document.querySelector("#bannerUserRole"),
+    bannerDate: document.querySelector("#bannerDate"),
+    liveCompanyChart: document.querySelector("#liveCompanyChart"),
+    liveCategoryChart: document.querySelector("#liveCategoryChart"),
+    summaryGrid: document.querySelector(".summary-grid"),
+    liveChartsGrid: document.querySelector(".live-charts-grid"),
+    opsBanner: document.querySelector(".ops-banner"),
     pageLoader: document.querySelector("#pageLoader"),
     tabButtons: document.querySelectorAll(".module-tab"),
     modulePanels: document.querySelectorAll(".module-panel")
@@ -279,12 +311,61 @@ function syncAdminAccess() {
 }
 
 function updateUserChip() {
-    elements.userEmail.textContent = state.currentUserName || state.currentUser?.email || "Usuario activo";
+    const displayName = state.currentUserName || state.currentUser?.email || "Usuario activo";
+    const roleLabel = state.isAdmin ? "Administrador" : "Operador";
+
+    elements.userEmail.textContent = displayName;
+    if (elements.userRoleBadge) {
+        elements.userRoleBadge.textContent = roleLabel;
+    }
+    if (elements.bannerUserName) {
+        elements.bannerUserName.textContent = displayName.toUpperCase();
+    }
+    if (elements.bannerUserRole) {
+        elements.bannerUserRole.textContent = state.isAdmin ? "ADMINISTRADOR DEL SISTEMA" : "OPERADOR DE CAMPO";
+    }
     elements.profileButton.title = "Perfil";
 }
 
+function setAppSkeleton(isLoading) {
+    elements.opsBanner?.classList.toggle("is-skeleton", isLoading);
+    elements.summaryGrid?.classList.toggle("is-skeleton", isLoading);
+    elements.liveChartsGrid?.classList.toggle("is-skeleton", isLoading);
+}
+
+function setHistorySkeleton(isLoading) {
+    elements.summaryGrid?.classList.toggle("is-skeleton", isLoading);
+    elements.liveChartsGrid?.classList.toggle("is-skeleton", isLoading);
+    if (isLoading && elements.historyList) {
+        elements.historyCount.textContent = "Cargando...";
+        elements.historyList.innerHTML = Array.from({ length: 5 }, () => `
+            <div class="skeleton-row" aria-hidden="true">
+                <div class="skeleton-row-left">
+                    <div class="skeleton-row-top">
+                        <span class="skeleton-box" style="width:190px;height:15px"></span>
+                        <span class="skeleton-box" style="width:78px;height:20px;border-radius:999px"></span>
+                        <span class="skeleton-box" style="width:68px;height:12px"></span>
+                    </div>
+                    <span class="skeleton-box" style="width:68%;height:12px"></span>
+                </div>
+                <div class="skeleton-row-right">
+                    <div class="skeleton-row-amounts">
+                        <span class="skeleton-box" style="width:86px;height:15px"></span>
+                        <span class="skeleton-box" style="width:70px;height:11px"></span>
+                    </div>
+                    <div class="skeleton-row-actions">
+                        <span class="skeleton-box" style="width:66px;height:30px"></span>
+                        <span class="skeleton-box" style="width:62px;height:30px"></span>
+                        <span class="skeleton-box" style="width:32px;height:30px"></span>
+                    </div>
+                </div>
+            </div>
+        `).join("");
+    }
+}
+
 async function init() {
-    showPageLoader();
+    setAppSkeleton(true);
     const { data, error } = await supabaseClient.auth.getSession();
 
     if (error || !data.session) {
@@ -297,13 +378,23 @@ async function init() {
     elements.userEmail.textContent = state.currentUser.email || "Usuario activo";
     await loadCurrentUserRole();
     await loadCurrentUserProfile();
+    elements.opsBanner?.classList.remove("is-skeleton");
     elements.fecha.value = toDateInput(new Date());
+    if (elements.bannerDate) {
+        elements.bannerDate.textContent = new Date().toLocaleDateString("es-VE", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
+    }
     state.tasaBinance = Number(localStorage.getItem(BINANCE_RATE_STORAGE_KEY)) || 0;
     renderPaymentMethods("USD");
     syncPaymentMode();
     syncRateTypeToPayment(false);
 
     bindEvents();
+    restoreSidebarState();
     setPeriodDates("month");
 
     const startupTasks = [loadBcvRate(), loadBcvEuroRate(), loadCategorias()];
@@ -316,13 +407,22 @@ async function init() {
     restoreExpenseDraft();
 
     setupBcvAutoRefresh();
-    hidePageLoader();
+    setAppSkeleton(false);
 }
 
 function bindEvents() {
     elements.tabButtons.forEach((button) => {
         button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
     });
+    elements.sidebarToggle?.addEventListener("click", toggleSidebar);
+    elements.companyCards.forEach((card) => {
+        card.addEventListener("click", () => {
+            elements.empresa.value = card.dataset.company || "";
+            syncCompanyPickerUI();
+            saveExpenseDraft();
+        });
+    });
+    elements.empresa?.addEventListener("change", syncCompanyPickerUI);
     elements.profileButton.addEventListener("click", () => openProfileModal());
     elements.reloadAppButton.addEventListener("click", reloadPlatform);
     elements.logoutButton.addEventListener("click", logout);
@@ -369,9 +469,23 @@ function bindEvents() {
         elements.periodFilter.value = "custom";
         loadHistorico();
     });
+    elements.companyFilter.addEventListener("change", loadHistorico);
     elements.refreshButton.addEventListener("click", loadHistorico);
     elements.exportButton.addEventListener("click", exportExcel);
     elements.historyList.addEventListener("click", handleHistoryClick);
+    elements.historySearch?.addEventListener("input", () => renderHistoryItems(state.historyRows));
+    elements.clearHistorySearch?.addEventListener("click", () => {
+        if (!elements.historySearch) return;
+        elements.historySearch.value = "";
+        renderHistoryItems(state.historyRows);
+        elements.historySearch.focus();
+    });
+    elements.scrollTopButton?.addEventListener("click", () => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        elements.historyList?.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    window.addEventListener("scroll", updateScrollTopVisibility, { passive: true });
+    elements.historyList?.addEventListener("scroll", updateScrollTopVisibility, { passive: true });
 
     elements.dropZone.addEventListener("click", () => elements.comprobanteInput.click());
     elements.dropZone.addEventListener("keydown", (event) => {
@@ -438,6 +552,28 @@ async function activateTab(target) {
         nextPanel.classList.remove("is-entering");
         state.switchingTab = false;
     });
+}
+
+function syncCompanyPickerUI() {
+    const selected = elements.empresa?.value || "";
+    elements.companyCards.forEach((card) => {
+        const isSelected = card.dataset.company === selected;
+        card.classList.toggle("is-selected", isSelected);
+        card.setAttribute("aria-pressed", String(isSelected));
+    });
+}
+
+function toggleSidebar() {
+    if (!elements.workspaceShell) return;
+    const collapsed = elements.workspaceShell.classList.toggle("is-sidebar-collapsed");
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
+function restoreSidebarState() {
+    if (!elements.workspaceShell) return;
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") {
+        elements.workspaceShell.classList.add("is-sidebar-collapsed");
+    }
 }
 
 function delay(ms) {
@@ -531,6 +667,9 @@ async function loadBcvEuroRate(options = {}) {
 
 function setBcvEuroRate(rate) {
     state.tasaBcvEur = Number(rate) || 0;
+    if (elements.sidebarBcvEur) {
+        elements.sidebarBcvEur.textContent = state.tasaBcvEur > 0 ? formatNumber(state.tasaBcvEur, 2) : "--";
+    }
     if (elements.tipoTasa.value === "BCV_EUR") {
         updateRateField();
     }
@@ -538,6 +677,9 @@ function setBcvEuroRate(rate) {
 
 function setBcvRate(rate) {
     state.tasaBcv = Number(rate) || 0;
+    if (elements.sidebarBcvUsd) {
+        elements.sidebarBcvUsd.textContent = state.tasaBcv > 0 ? formatNumber(state.tasaBcv, 2) : "--";
+    }
     if (elements.tipoTasa.value === "BCV_USD" || elements.tipoTasa.value === "BCV") {
         updateRateField();
     }
@@ -1077,6 +1219,12 @@ async function saveExpense(event) {
         return;
     }
 
+    if (!elements.empresa.value) {
+        await Swal.fire({ icon: "warning", title: "Empresa requerida", text: "Selecciona si el gasto corresponde a UV Servicios o Union Data." });
+        elements.companyCards[0]?.focus();
+        return;
+    }
+
     if (!selectedCategory) {
         await Swal.fire({ icon: "warning", title: "Categoría requerida", text: "Selecciona una categoría o crea una nueva antes de guardar." });
         elements.categoria.focus();
@@ -1134,6 +1282,7 @@ async function saveExpense(event) {
         user_id: state.currentUser.id,
         user_email: state.currentUser.email,
         fecha: elements.fecha.value,
+        empresa: elements.empresa.value,
         categoria_id: selectedCategory.id || null,
         categoria_nombre: selectedCategory.nombre,
         numero_factura: cleanText(elements.numeroFactura.value),
@@ -1266,8 +1415,11 @@ async function loadHistorico() {
         return;
     }
 
+    setHistorySkeleton(true);
+
     const from = elements.fromDate.value;
     const to = elements.toDate.value;
+    const company = elements.companyFilter?.value || "";
 
     let query = supabaseClient
         .from("gastos_operativos")
@@ -1277,6 +1429,7 @@ async function loadHistorico() {
 
     if (from) query = query.gte("fecha", from);
     if (to) query = query.lte("fecha", to);
+    if (company) query = query.eq("empresa", company);
 
     let { data, error } = await query.limit(500);
 
@@ -1297,12 +1450,14 @@ async function loadHistorico() {
 
     if (error) {
         console.error(error);
+        setHistorySkeleton(false);
         elements.historyList.innerHTML = '<div class="empty-state">No se pudo cargar el histórico.</div>';
         elements.historyCount.textContent = "Error";
         return;
     }
 
     state.historyRows = data || [];
+    setHistorySkeleton(false);
     renderHistorico(state.historyRows);
 }
 
@@ -1318,6 +1473,7 @@ async function insertExpenseWithSchemaFallback(payload) {
     }
 
     const legacyPayload = { ...payload };
+    delete legacyPayload.empresa;
     delete legacyPayload.vehiculo_nombre;
     delete legacyPayload.vehiculo_placa;
     delete legacyPayload.litros_gasolina;
@@ -1332,54 +1488,129 @@ async function insertExpenseWithSchemaFallback(payload) {
 function isSchemaCacheColumnError(error) {
     if (!error) return false;
     const text = `${error.code || ""} ${error.message || ""} ${error.details || ""}`.toLowerCase();
-    return text.includes("pgrst204") || text.includes("schema cache") || text.includes("litros_gasolina") || text.includes("vehiculo_nombre") || text.includes("vehiculo_placa");
+    return text.includes("pgrst204") || text.includes("schema cache") || text.includes("empresa") || text.includes("litros_gasolina") || text.includes("vehiculo_nombre") || text.includes("vehiculo_placa");
+}
+
+function updateScrollTopVisibility() {
+    if (!elements.scrollTopButton) return;
+    const scrolledWindow = window.scrollY > 240;
+    const scrolledList = (elements.historyList?.scrollTop || 0) > 180;
+    elements.scrollTopButton.classList.toggle("is-visible", scrolledWindow || scrolledList);
 }
 
 function renderHistorico(rows) {
     elements.historyCount.textContent = `${rows.length} ${rows.length === 1 ? "registro" : "registros"}`;
     renderTotals(rows);
+    renderLiveDashboardCharts(rows);
+    renderHistoryItems(rows);
+}
 
-    if (!rows.length) {
+function getFilteredHistoryRows(rows) {
+    const rawQuery = elements.historySearch?.value || "";
+    const query = normalizeCategoryName(rawQuery);
+    elements.clearHistorySearch?.classList.toggle("is-hidden", !rawQuery.trim());
+
+    if (!query) {
+        if (elements.historySearchCount) {
+            elements.historySearchCount.textContent = "";
+        }
+        return rows;
+    }
+
+    const terms = query.split(" ").filter(Boolean);
+    const filtered = rows.filter((row) => {
+        const searchable = normalizeCategoryName([
+            row.fecha,
+            formatDate(row.fecha),
+            row.empresa || "Sin empresa",
+            row.categoria_nombre,
+            getExpenseTitle(row),
+            row.numero_factura,
+            row.forma_pago,
+            getRateTypeLabel(row.tipo_tasa),
+            row.vehiculo_nombre,
+            row.vehiculo_placa,
+            row.detalle_actividad,
+            row.descripcion,
+            row.responsable,
+            row.monto_usd,
+            formatNumber(row.monto_usd, 2),
+            row.monto_ves,
+            formatNumber(row.monto_ves, 2)
+        ].filter(Boolean).join(" "));
+
+        return terms.every((term) => searchable.includes(term));
+    });
+
+    if (elements.historySearchCount) {
+        elements.historySearchCount.textContent = `Mostrando ${filtered.length} de ${rows.length}`;
+    }
+
+    return filtered;
+}
+
+function renderHistoryItems(rows) {
+    const filteredRows = getFilteredHistoryRows(rows);
+
+    if (!filteredRows.length) {
         elements.historyList.classList.remove("has-records");
-        elements.historyList.innerHTML = '<div class="empty-state">No hay gastos en este periodo.</div>';
+        const isSearching = Boolean(elements.historySearch?.value.trim());
+        elements.historyList.innerHTML = isSearching
+            ? '<div class="empty-state">No se encontraron gastos que coincidan con tu búsqueda.</div>'
+            : '<div class="empty-state">No hay gastos en este periodo.</div>';
         return;
     }
 
     elements.historyList.classList.add("has-records");
 
-    const items = rows.map((row) => {
+    const items = filteredRows.map((row) => {
         const title = getExpenseTitle(row);
         const subtitle = [formatDate(row.fecha), row.responsable || "Sin responsable", row.forma_pago || "Sin pago"].filter(Boolean).join(" · ");
         const operationalDetail = getOperationalDetail(row);
         const hasReceipt = Boolean(row.comprobante_url);
+        const companyName = row.empresa || "Sin empresa";
+        const companyClass = row.empresa === "Union Data"
+            ? "expense-company is-union-data"
+            : row.empresa
+                ? "expense-company"
+                : "expense-company is-empty";
+        const cardCompanyClass = row.empresa === "Union Data"
+            ? "is-union-data"
+            : row.empresa
+                ? ""
+                : "is-no-company";
+        const companyLogoUrl = COMPANY_LOGOS[row.empresa] || "";
+        const companyLogoHtml = companyLogoUrl
+            ? `<img class="expense-company-logo" src="${companyLogoUrl}" alt="">`
+            : "";
 
         return `
-            <article class="expense-card">
+            <article class="expense-card ${cardCompanyClass}">
                 <div class="expense-card-main">
-                    <div class="expense-card-head">
-                        <div class="expense-title-wrap">
-                            <span class="expense-date">${formatDate(row.fecha)}</span>
-                            <h3 title="${escapeAttribute(row.categoria_nombre || "")}">${escapeHtml(title)}</h3>
-                            <p>${escapeHtml(subtitle)}</p>
-                        </div>
-                        <div class="expense-amounts" aria-label="Monto del gasto">
-                            <strong>${getMoneyUnit(row.tipo_tasa)} ${formatNumber(row.monto_usd, 2)}</strong>
-                            <span>Bs. ${formatNumber(row.monto_ves, 2)}</span>
-                        </div>
+                    <div class="expense-top-line">
+                        <h3 title="${escapeAttribute(row.categoria_nombre || "")}">${escapeHtml(title)}</h3>
+                        <span class="${companyClass}">${companyLogoHtml}${escapeHtml(companyName)}</span>
+                        <span class="expense-date">${formatDate(row.fecha)}</span>
                     </div>
-
-                    <div class="expense-facts">
-                        <div><span>Factura</span><strong>${escapeHtml(row.numero_factura || "Sin factura")}</strong></div>
-                        <div><span>Tasa</span><strong>${escapeHtml(getRateDisplay(row))}</strong></div>
-                        <div><span>Detalle operativo</span><strong>${escapeHtml(operationalDetail)}</strong></div>
-                        <div><span>Soporte</span><strong class="${hasReceipt ? "support-ok" : "support-missing"}">${hasReceipt ? "Disponible" : "Sin soporte"}</strong></div>
+                    <div class="expense-meta-inline">
+                        <span><strong>${escapeHtml(row.responsable || "Sin responsable")}</strong> · ${escapeHtml(row.forma_pago || "Sin pago")}</span>
+                        ${row.numero_factura ? `<span>Factura: <strong>${escapeHtml(row.numero_factura)}</strong></span>` : ""}
+                        <span>Tasa: <strong>${escapeHtml(getRateDisplay(row))}</strong></span>
+                        ${operationalDetail !== "-" ? `<span>${escapeHtml(operationalDetail)}</span>` : ""}
+                        <span class="${hasReceipt ? "support-ok" : "support-missing"}">${hasReceipt ? "Con soporte" : "Sin soporte"}</span>
                     </div>
                 </div>
 
-                <div class="expense-card-actions">
-                    ${hasReceipt ? renderReceiptLink(row.comprobante_url) : '<span class="receipt-placeholder">Sin comprobante</span>'}
-                    <button class="edit-expense-button" type="button" data-expense-id="${escapeAttribute(row.id)}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editar</button>
-                    <button class="delete-expense-button" type="button" data-expense-id="${escapeAttribute(row.id)}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 6l1 15h10l1-15"/></svg>Eliminar</button>
+                <div class="expense-right">
+                    <div class="expense-amounts" aria-label="Monto del gasto">
+                        <strong>${getMoneyUnit(row.tipo_tasa)} ${formatNumber(row.monto_usd, 2)}</strong>
+                        <span>Bs. ${formatNumber(row.monto_ves, 2)}</span>
+                    </div>
+                    <div class="expense-card-actions">
+                        ${hasReceipt ? renderReceiptLink(row.comprobante_url) : '<span class="receipt-placeholder">Sin archivo</span>'}
+                        <button class="edit-expense-button" type="button" data-expense-id="${escapeAttribute(row.id)}" title="Editar gasto"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editar</button>
+                        <button class="delete-expense-button" type="button" data-expense-id="${escapeAttribute(row.id)}" title="Eliminar gasto"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 15h10l1-15"/></svg></button>
+                    </div>
                 </div>
             </article>
         `;
@@ -1463,6 +1694,12 @@ async function editExpense(row) {
         html: `
             <div style="display:grid;gap:10px;text-align:left;">
                 <label>Fecha<input id="editFecha" class="swal2-input" type="date" value="${escapeAttribute(row.fecha || "")}"></label>
+                <label>Empresa
+                    <select id="editEmpresa" class="swal2-select">
+                        <option value="" ${!row.empresa ? "selected" : ""}>Sin empresa</option>
+                        ${COMPANIES.map((company) => `<option value="${escapeAttribute(company)}" ${row.empresa === company ? "selected" : ""}>${escapeHtml(company)}</option>`).join("")}
+                    </select>
+                </label>
                 <label>N° Factura / Comprobante<input id="editFactura" class="swal2-input" type="text" value="${escapeAttribute(row.numero_factura || "")}" placeholder="Ej. FAC-001245"></label>
                 <label>Monto divisa<input id="editMontoUsd" class="swal2-input" type="number" min="0" step="0.01" value="${escapeAttribute(row.monto_usd || 0)}"></label>
                 <label>Monto VES<input id="editMontoVes" class="swal2-input" type="number" min="0" step="0.01" value="${escapeAttribute(row.monto_ves || 0)}"></label>
@@ -1498,6 +1735,7 @@ async function editExpense(row) {
         cancelButtonText: "Cancelar",
         preConfirm: () => {
             const fecha = document.querySelector("#editFecha").value;
+            const empresa = document.querySelector("#editEmpresa").value;
             const montoUsd = roundMoney(parseCurrency(document.querySelector("#editMontoUsd").value));
             const montoVes = roundMoney(parseCurrency(document.querySelector("#editMontoVes").value));
             const tipoTasa = document.querySelector("#editTipoTasa").value;
@@ -1505,6 +1743,11 @@ async function editExpense(row) {
 
             if (!fecha) {
                 Swal.showValidationMessage("Selecciona la fecha del gasto.");
+                return false;
+            }
+
+            if (!empresa) {
+                Swal.showValidationMessage("Selecciona la empresa del gasto.");
                 return false;
             }
 
@@ -1520,6 +1763,7 @@ async function editExpense(row) {
 
             return {
                 fecha,
+                empresa,
                 numero_factura: cleanText(document.querySelector("#editFactura").value),
                 forma_pago: document.querySelector("#editFormaPago").value,
                 tipo_tasa: tipoTasa,
@@ -1566,6 +1810,7 @@ async function updateExpenseWithSchemaFallback(id, payload) {
     }
 
     const legacyPayload = { ...payload };
+    delete legacyPayload.empresa;
     delete legacyPayload.litros_gasolina;
 
     return supabaseClient
@@ -1611,14 +1856,147 @@ function renderTotals(rows) {
         return acc;
     }, { usd: 0, ves: 0, receipts: 0 });
 
-    elements.totalUsd.textContent = formatNumber(totals.usd, 2);
+    elements.totalUsd.textContent = `$${formatNumber(totals.usd, 2)}`;
     elements.totalVes.textContent = `Bs. ${formatNumber(totals.ves, 2)}`;
     elements.totalReceipts.textContent = String(totals.receipts);
+
+    if (elements.totalAvg) {
+        const avg = rows.length ? totals.usd / rows.length : 0;
+        elements.totalAvg.textContent = `$${formatNumber(avg, 2)}`;
+    }
+
+    if (elements.receiptCoverage) {
+        const pct = rows.length ? ((totals.receipts / rows.length) * 100).toFixed(1) : "0.0";
+        elements.receiptCoverage.textContent = `${pct}% con soporte`;
+    }
+}
+
+function renderLiveDashboardCharts(rows) {
+    if (typeof window.Chart === "undefined") return;
+
+    if (state.liveCharts.company) {
+        state.liveCharts.company.destroy();
+        state.liveCharts.company = null;
+    }
+    if (state.liveCharts.category) {
+        state.liveCharts.category.destroy();
+        state.liveCharts.category = null;
+    }
+
+    if (elements.liveCompanyChart) {
+        const companyMap = rows.reduce((acc, row) => {
+            const key = row.empresa || "Sin empresa";
+            acc[key] = (acc[key] || 0) + Number(row.monto_usd || 0);
+            return acc;
+        }, {});
+        const companyEntries = Object.entries(companyMap).sort(([, a], [, b]) => b - a);
+        const labels = companyEntries.length ? companyEntries.map(([name]) => name) : ["Sin datos"];
+        const values = companyEntries.length ? companyEntries.map(([, val]) => Number(val.toFixed(2))) : [1];
+        const colors = companyEntries.length
+            ? companyEntries.map(([name]) => name === "UV Servicios" ? "#2563EB" : name === "Union Data" ? "#7C3AED" : "#94A3B8")
+            : ["#E2E8F0"];
+
+        state.liveCharts.company = new window.Chart(elements.liveCompanyChart.getContext("2d"), {
+            type: "doughnut",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: "#FFFFFF",
+                    borderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "62%",
+                plugins: {
+                    legend: {
+                        position: "right",
+                        labels: {
+                            boxWidth: 12,
+                            padding: 12,
+                            color: "#334155",
+                            font: { family: "Plus Jakarta Sans", size: 12, weight: "600" }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => companyEntries.length ? ` $${formatNumber(ctx.parsed, 2)}` : " Sin gastos"
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    if (elements.liveCategoryChart) {
+        const categoryMap = rows.reduce((acc, row) => {
+            const key = row.categoria_nombre || "Sin categoría";
+            acc[key] = (acc[key] || 0) + Number(row.monto_usd || 0);
+            return acc;
+        }, {});
+        const topCategories = Object.entries(categoryMap)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5);
+
+        const labels = topCategories.length
+            ? topCategories.map(([name]) => name.length > 22 ? `${name.slice(0, 21)}…` : name)
+            : ["Sin datos"];
+        const values = topCategories.length
+            ? topCategories.map(([, val]) => Number(val.toFixed(2)))
+            : [0];
+
+        state.liveCharts.category = new window.Chart(elements.liveCategoryChart.getContext("2d"), {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: ["#2563EB", "#3B82F6", "#60A5FA", "#7C3AED", "#0EA5E9"],
+                    borderRadius: 6,
+                    maxBarThickness: 22
+                }]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: "#F1F5F9" },
+                        ticks: {
+                            color: "#64748B",
+                            font: { family: "Plus Jakarta Sans", size: 11 },
+                            callback: (value) => `$${Number(value).toLocaleString("en-US")}`
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: "#1E293B",
+                            font: { family: "Plus Jakarta Sans", size: 11, weight: "600" }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => ` $${formatNumber(ctx.parsed.x, 2)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 function renderReceiptLink(url) {
     if (!url) return "-";
-    return `<a class="receipt-link" href="${escapeAttribute(url)}" target="_blank" rel="noopener">Ver comprobante</a>`;
+    return `<a class="receipt-link" href="${escapeAttribute(url)}" target="_blank" rel="noopener">Soporte</a>`;
 }
 
 function getOperationalDetail(row) {
@@ -1643,7 +2021,7 @@ function getOperationalDetail(row) {
     return details.join(" · ") || "-";
 }
 
-function exportExcel() {
+async function exportExcel() {
     if (!state.isAdmin) {
         Swal.fire({ icon: "warning", title: "Solo administrador", text: "Tu usuario no tiene permiso para generar el Excel." });
         return;
@@ -1654,189 +2032,31 @@ function exportExcel() {
         return;
     }
 
-    const rows = state.historyRows.map((row) => ({
-        Fecha: formatDate(row.fecha),
-        Categoria: row.categoria_nombre || "",
-        Factura: row.numero_factura || "",
-        "Moneda de pago": row.moneda || "",
-        "Forma de pago": row.forma_pago || "",
-        "Tipo de tasa": getRateTypeLabel(row.tipo_tasa),
-        "Tasa usada": Number(row.tasa_bcv || 0),
-        "Unidad divisa": getMoneyUnit(row.tipo_tasa),
-        "Monto divisa": Number(row.monto_usd || 0),
-        "Monto VES": Number(row.monto_ves || 0),
-        Vehiculo: row.vehiculo_nombre || "",
-        Placa: row.vehiculo_placa || "",
-        Kilometraje: row.kilometraje || "",
-        "Litros gasolina": row.litros_gasolina || "",
-        "Detalle actividad": row.detalle_actividad || "",
-        Responsable: row.responsable || "",
-        "Registrado por": row.user_email || "",
-        Descripcion: row.descripcion || "",
-        Comprobante: row.comprobante_url || ""
-    }));
+    const originalHtml = elements.exportButton.innerHTML;
+    elements.exportButton.disabled = true;
+    elements.exportButton.textContent = "Generando Excel...";
 
-    const detailWorksheet = XLSX.utils.json_to_sheet(rows);
-    detailWorksheet["!cols"] = [
-        { wch: 12 }, { wch: 34 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 14 },
-        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 },
-        { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 36 }, { wch: 48 }
-    ];
-
-    const summaryRows = buildExcelSummaryRows(state.historyRows);
-    const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryRows);
-    summaryWorksheet["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 16 }];
-    summaryWorksheet["!rows"] = summaryRows.map((row, index) => ({ hpt: index === 0 ? 30 : index === 4 ? 28 : 20 }));
-    summaryWorksheet["!merges"] = buildSummaryMerges(summaryRows);
-    styleExcelSummary(summaryWorksheet, summaryRows);
-    styleExcelHeader(detailWorksheet, 19);
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "Resumen");
-    XLSX.utils.book_append_sheet(workbook, detailWorksheet, "Detalle");
-    workbook.Workbook = {
-        Sheets: [
-            { name: "Resumen", Hidden: 0, TabColor: { rgb: "2563EB" } },
-            { name: "Detalle", Hidden: 0, TabColor: { rgb: "16A34A" } }
-        ]
-    };
-
-    const filename = `reporte-gastos-${elements.fromDate.value || "inicio"}-a-${elements.toDate.value || "hoy"}.xlsx`;
-    XLSX.writeFile(workbook, filename);
-}
-
-function buildExcelSummaryRows(rows) {
-    const totals = rows.reduce((acc, row) => {
-        acc.usd += Number(row.monto_usd || 0);
-        acc.ves += Number(row.monto_ves || 0);
-        acc.receipts += row.comprobante_url ? 1 : 0;
-        acc.count += 1;
-        acc.liters += Number(row.litros_gasolina || 0);
-        return acc;
-    }, { usd: 0, ves: 0, receipts: 0, count: 0, liters: 0 });
-
-    const categories = buildGroupedSummary(rows, (row) => row.categoria_nombre || "Sin categoria");
-    const responsibles = buildGroupedSummary(rows, (row) => row.responsable || "Sin responsable");
-    const vehicles = buildGroupedSummary(rows.filter((row) => row.vehiculo_nombre || row.vehiculo_placa), (row) => [row.vehiculo_nombre, row.vehiculo_placa].filter(Boolean).join(" - "));
-
-    return [
-        ["REPORTE EJECUTIVO DE GASTOS OPERATIVOS"],
-        [`Periodo evaluado: ${elements.fromDate.value || "inicio"} al ${elements.toDate.value || "hoy"}`],
-        [],
-        ["TOTAL DIVISA", "TOTAL VES", "REGISTROS", "COMPROBANTES", "LITROS GASOLINA"],
-        [Number(totals.usd.toFixed(2)), Number(totals.ves.toFixed(2)), totals.count, totals.receipts, Number(totals.liters.toFixed(2))],
-        [],
-        ["DISTRIBUCION POR CATEGORIA"],
-        ["Categoria", "USD", "VES", "Registros", "% USD"],
-        ...categories.map((row) => appendPercentage(row, totals.usd)),
-        [],
-        ["DISTRIBUCION POR RESPONSABLE"],
-        ["Responsable", "USD", "VES", "Registros", "% USD"],
-        ...responsibles.map((row) => appendPercentage(row, totals.usd)),
-        [],
-        ["DISTRIBUCION POR VEHICULO"],
-        ["Vehiculo / placa", "USD", "VES", "Registros", "% USD"],
-        ...(vehicles.length ? vehicles.map((row) => appendPercentage(row, totals.usd)) : [["Sin gastos asociados a vehiculos", 0, 0, 0, "0%"]]),
-        [],
-        ["Nota"],
-        ["La hoja Detalle contiene cada gasto individual con factura, pago, responsable y comprobante."]
-    ];
-}
-
-function buildSummaryMerges(rows) {
-    return rows.reduce((merges, row, index) => {
-        const label = String(row[0] || "");
-        if (index <= 1 || label === "DISTRIBUCION POR CATEGORIA" || label === "DISTRIBUCION POR RESPONSABLE" || label === "DISTRIBUCION POR VEHICULO" || label === "Nota") {
-            merges.push({ s: { r: index, c: 0 }, e: { r: index, c: 4 } });
-        }
-        return merges;
-    }, []);
-}
-
-function buildGroupedSummary(rows, keyGetter) {
-    const groups = rows.reduce((acc, row) => {
-        const key = keyGetter(row) || "Sin detalle";
-        if (!acc[key]) acc[key] = { usd: 0, ves: 0, count: 0 };
-        acc[key].usd += Number(row.monto_usd || 0);
-        acc[key].ves += Number(row.monto_ves || 0);
-        acc[key].count += 1;
-        return acc;
-    }, {});
-
-    return Object.entries(groups)
-        .sort(([, left], [, right]) => right.usd - left.usd)
-        .map(([name, value]) => [name, Number(value.usd.toFixed(2)), Number(value.ves.toFixed(2)), value.count]);
-}
-
-function appendPercentage(row, totalUsd) {
-    const percentage = totalUsd > 0 ? `${((Number(row[1] || 0) / totalUsd) * 100).toFixed(1)}%` : "0%";
-    return [...row, percentage];
-}
-
-function styleExcelSummary(worksheet, rows) {
-    const range = XLSX.utils.decode_range(worksheet["!ref"]);
-    const border = {
-        top: { style: "thin", color: { rgb: "D8E1EC" } },
-        right: { style: "thin", color: { rgb: "D8E1EC" } },
-        bottom: { style: "thin", color: { rgb: "D8E1EC" } },
-        left: { style: "thin", color: { rgb: "D8E1EC" } }
-    };
-    const kpiColors = ["2563EB", "16A34A", "F59E0B", "7C3AED", "0EA5E9"];
-    const kpiSoftColors = ["DBEAFE", "DCFCE7", "FEF3C7", "EDE9FE", "E0F2FE"];
-
-    for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
-        for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
-            const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-            if (!worksheet[address]) worksheet[address] = { t: "s", v: "" };
-
-            const value = String(worksheet[address].v || "");
-            worksheet[address].s = {
-                font: { name: "Calibri", sz: 11, color: { rgb: "1E293B" } },
-                alignment: { vertical: "center" },
-                border
-            };
-
-            if (rowIndex === 0) {
-                worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "FFFFFF" }, sz: 18 }, fill: { fgColor: { rgb: "0F172A" } }, alignment: { horizontal: "center", vertical: "center" }, border };
-            } else if (rowIndex === 1) {
-                worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "1D4ED8" }, sz: 12 }, fill: { fgColor: { rgb: "EFF6FF" } }, alignment: { horizontal: "center", vertical: "center" }, border };
-            } else if (rowIndex === 3) {
-                worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "FFFFFF" }, sz: 11 }, fill: { fgColor: { rgb: kpiColors[colIndex] || "2563EB" } }, alignment: { horizontal: "center", vertical: "center" }, border };
-            } else if (rowIndex === 4) {
-                worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "0F172A" }, sz: 14 }, fill: { fgColor: { rgb: kpiSoftColors[colIndex] || "DBEAFE" } }, alignment: { horizontal: "center", vertical: "center" }, border };
-            } else if (value === "RESUMEN GENERAL" || value === "DISTRIBUCION POR CATEGORIA" || value === "DISTRIBUCION POR RESPONSABLE" || value === "DISTRIBUCION POR VEHICULO" || value === "Nota") {
-                worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "FFFFFF" }, sz: 12 }, fill: { fgColor: { rgb: "111827" } }, alignment: { horizontal: "left", vertical: "center" }, border };
-            } else if (["Categoria", "Responsable", "Vehiculo / placa"].includes(value)) {
-                const headerRow = rows[rowIndex] || [];
-                headerRow.forEach((_, index) => {
-                    const headerAddress = XLSX.utils.encode_cell({ r: rowIndex, c: index });
-                    if (!worksheet[headerAddress]) worksheet[headerAddress] = { t: "s", v: "" };
-                    worksheet[headerAddress].s = { font: { name: "Calibri", bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2563EB" } }, alignment: { horizontal: index === 0 ? "left" : "center", vertical: "center" }, border };
-                });
-            } else if (colIndex === 0 && value) {
-                worksheet[address].s.font.bold = true;
-                worksheet[address].s.fill = { fgColor: { rgb: "F8FAFC" } };
-            } else if (colIndex > 0 && value) {
-                worksheet[address].s.alignment = { horizontal: "center", vertical: "center" };
-            }
-        }
+    try {
+        await generateExecutiveExcelReport({
+            rows: state.historyRows,
+            fromDate: elements.fromDate.value,
+            toDate: elements.toDate.value,
+            companyFilter: elements.companyFilter?.value || "",
+            getRateTypeLabel,
+            getMoneyUnit,
+            formatDate
+        });
+    } catch (error) {
+        console.error(error);
+        await Swal.fire({
+            icon: "error",
+            title: "No se pudo generar el Excel",
+            text: error.message || "Ocurrió un error al construir el reporte."
+        });
+    } finally {
+        elements.exportButton.disabled = !state.isAdmin;
+        elements.exportButton.innerHTML = originalHtml;
     }
-}
-
-function styleExcelHeader(worksheet, columnCount) {
-    const border = {
-        top: { style: "thin", color: { rgb: "C7D2FE" } },
-        right: { style: "thin", color: { rgb: "C7D2FE" } },
-        bottom: { style: "thin", color: { rgb: "C7D2FE" } },
-        left: { style: "thin", color: { rgb: "C7D2FE" } }
-    };
-
-    for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
-        const address = XLSX.utils.encode_cell({ r: 0, c: colIndex });
-        if (!worksheet[address]) continue;
-        worksheet[address].s = { font: { name: "Calibri", bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "166534" } }, alignment: { horizontal: "center", vertical: "center" }, border };
-    }
-    worksheet["!autofilter"] = { ref: worksheet["!ref"] };
 }
 
 function setPeriodDates(period) {
@@ -1865,6 +2085,16 @@ function setPeriodDates(period) {
 
 function resetFormState() {
     elements.fecha.value = toDateInput(new Date());
+    if (elements.bannerDate) {
+        elements.bannerDate.textContent = new Date().toLocaleDateString("es-VE", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
+    }
+    elements.empresa.value = "";
+    syncCompanyPickerUI();
     elements.monedaUsd.checked = true;
     state.lastMoneyInput = "USD";
     renderPaymentMethods("USD");
@@ -1890,6 +2120,7 @@ function saveExpenseDraft() {
 
     const draft = {
         fecha: elements.fecha.value,
+        empresa: elements.empresa.value,
         categoria: elements.categoria.value,
         tempCategory: state.tempCategory,
         vehiculoUnidad: elements.vehiculoUnidad.value,
@@ -1936,6 +2167,8 @@ function restoreExpenseDraft() {
     renderCategorias(isKnownCategoryValue(draft.categoria) ? draft.categoria : "");
 
     elements.fecha.value = draft.fecha || toDateInput(new Date());
+    elements.empresa.value = COMPANIES.includes(draft.empresa) ? draft.empresa : "";
+    syncCompanyPickerUI();
     elements.vehiculoUnidad.value = draft.vehiculoUnidad || "";
     updateVehicleDetailVisibility();
     elements.vehiculoDetalle.value = draft.vehiculoDetalle || "";
@@ -1973,6 +2206,7 @@ function restoreExpenseDraft() {
 
 function hasExpenseDraftContent(draft) {
     return Boolean(
+        draft?.empresa ||
         draft?.categoria ||
         draft?.vehiculoUnidad ||
         draft?.vehiculoDetalle ||

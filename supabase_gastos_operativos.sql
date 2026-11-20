@@ -42,6 +42,7 @@ create table if not exists public.gastos_operativos (
     user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
     user_email text,
     fecha date not null default current_date,
+    empresa text,
     categoria_id uuid references public.categorias_gastos(id) on update cascade on delete set null,
     categoria_nombre text not null,
     numero_factura text,
@@ -69,6 +70,9 @@ alter table public.gastos_operativos
     add column if not exists user_email text;
 
 alter table public.gastos_operativos
+    add column if not exists empresa text;
+
+alter table public.gastos_operativos
     add column if not exists forma_pago text,
     add column if not exists tipo_tasa text not null default 'DIRECTO';
 
@@ -94,6 +98,7 @@ alter table public.categorias_gastos
     drop column if exists requiere_kilometraje;
 
 create index if not exists gastos_operativos_fecha_idx on public.gastos_operativos (fecha desc);
+create index if not exists gastos_operativos_empresa_idx on public.gastos_operativos (empresa);
 create index if not exists gastos_operativos_categoria_idx on public.gastos_operativos (categoria_id);
 create index if not exists gastos_operativos_responsable_idx on public.gastos_operativos (responsable);
 create index if not exists gastos_operativos_user_idx on public.gastos_operativos (user_id);
